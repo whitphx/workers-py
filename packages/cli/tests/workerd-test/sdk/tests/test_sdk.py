@@ -605,3 +605,20 @@ async def test_response_buffer_source_unit_tests():
 async def test_can_support_scheduled_cron_trigger():
     result = await env.SELF.scheduled(scheduledTime=1000, cron="* * * * 30")
     assert result.outcome == "ok"
+
+
+@pytest.mark.asyncio
+async def test_fetch_attaches_no_implicit_abort_signal():
+    captured = {}
+
+    async def fake_fetcher(request, opts):
+        captured["option_keys"] = list(js.Object.keys(opts)) if opts else []
+        return js.Response.new("ok")
+
+    response = await fetch("https://example.com/", fetcher=fake_fetcher)
+    assert await response.text() == "ok"
+    # An implicitly-attached abort signal ties the subrequest's lifetime to a
+    # wrapper object nothing keeps alive after the handler returns, which
+    # cancels still-open subrequests (proxied WebSockets, streaming bodies) on
+    # deployed Workers. Only caller-supplied options may reach the fetcher.
+    assert "signal" not in captured["option_keys"]
